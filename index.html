@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>サイコロトーク ✨ エクストリーム</title>
+    <style>
+        /* =========================================
+           基本スタイル
+           ========================================= */
+        :root {
+            /* デフォルトカラー（ターコイズブルー） */
+            --bg-inner: #26c4b5;
+            --bg-outer: #1a8a7f;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            /* 背景色をCSS変数で制御 */
+            background: radial-gradient(circle at center, var(--bg-inner) 0%, var(--bg-outer) 100%);
+            font-family: "Hiragino Sans", "Meiryo", "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+            color: #fff;
+            user-select: none;
+            touch-action: none; /* モバイルでのスクロール防止 */
+        }
+
+        /* =========================================
+           背景オーバーレイ（結果発表用）
+           ========================================= */
+        #result-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85); /* 濃いグレーで背景を隠す */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            z-index: 150; /* サイコロ(1)より上、テキスト(200)より下 */
+            backdrop-filter: blur(2px);
+        }
+
+        #result-overlay.active {
+            opacity: 1;
+        }
+
+        /* =========================================
+           ヘッダー
+           ========================================= */
+        .header-logo {
+            position: absolute;
+            top: 20px; 
+            left: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(5px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+        }
+
+        .header-logo span {
+            font-weight: 900;
+            font-size: 1.2rem;
+            color: #fff;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        /* =========================================
+           お題表示エリア
+           ========================================= */
+        #result-container {
+            position: absolute;
+            top: 45%; /* 少し上に配置してボタンと被らないように */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 800px; /* 横に広がりすぎないように制限 */
+            text-align: center;
+            z-index: 200; 
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #theme-text {
+            font-weight: 900;
+            line-height: 1.5; /* 行間を広げて読みやすく */
+            text-shadow: 
+                0 4px 15px rgba(0,0,0,0.8),
+                0 0 30px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word; /* 長い単語も折り返す */
+        }
+
+        #theme-text.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* =========================================
+           3Dステージ
+           ========================================= */
+        .stage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            perspective: 1200px;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .dice-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            transform-style: preserve-3d;
+        }
+
+        .dice {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            top: -100px; /* 中心合わせ */
+            left: -100px;
+            transform-style: preserve-3d;
+            /* 初期回転 */
+            transform: rotateX(15deg) rotateY(15deg); 
+        }
+
+        .face {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            border: 4px solid rgba(0,0,0,0.1);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px; 
+            box-sizing: border-box;
+            background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+            color: #333;
+            text-align: center;
+            font-weight: 800;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.1);
+            backface-visibility: hidden; /* 裏面は見せない */
+            overflow: hidden;
+        }
+        
+        /* 目のデザイン装飾 */
+        .face::after {
+            content: '';
+            position: absolute;
+            top: 10px; left: 10px; right: 10px; bottom: 10px;
+            border: 2px dashed rgba(0,0,0,0.1);
+            border-radius: 16px;
+            pointer-events: none;
+        }
+
+        .face span {
+            display: block;
+            width: 100%;
+            word-break: break-all;
+            z-index: 2;
+        }
+
+        /* サイコロの各面 */
+        .f1 { transform: rotateY(0deg) translateZ(100px); }
+        .f6 { transform: rotateY(180deg) translateZ(100px); background: #fdfdfd; }
+        .f3 { transform: rotateY(90deg) translateZ(100px); }
+        .f2 { transform: rotateY(-90deg) translateZ(100px); background: #fdfdfd; }
+        .f5 { transform: rotateX(90deg) translateZ(100px); }
+        .f4 { transform: rotateX(-90deg) translateZ(100px); background: #fdfdfd; }
+
+        /* =========================================
+           エフェクト（パーティクル）
+           ========================================= */
+        .particle {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #ffeb3b 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+            animation: pop 0.5s ease-out forwards;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+
+        /* =========================================
+           パワーゲージ & コントロール
+           ========================================= */
+        .controls-area {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            z-index: 160; /* オーバーレイ(150)より手前にして操作可能にする */
+        }
+
+        .power-gauge-container {
+            width: 300px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .power-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            transition: width 0.1s linear, background 0.3s;
+        }
+        
+        .power-bar.max {
+            background: linear-gradient(90deg, #ff0844 0%, #ffb199 100%);
+            box-shadow: 0 0 20px #ff0844;
+        }
+
+        .info-text {
+            font-size: 0.9rem;
+            color: #ddd;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.4);
+            outline: none;
+        }
+
+        .roll-button { 
+            background: linear-gradient(to bottom, #ff6b6b, #ee5253); 
+            min-width: 180px;
+            font-size: 1.2rem;
+        }
+        .roll-button:active { transform: translateY(4px); box-shadow: 0 0 0 rgba(0,0,0,0); }
+        
+        /* 長押し中のアニメーション */
+        .roll-button.charging {
+            animation: shake 0.1s infinite;
+        }
+
+        @keyframes shake {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(1deg); }
+            75% { transform: rotate(-1deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        .ai-button {
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .ai-button:hover { background: rgba(255,255,255,0.3); }
+
+        /* =========================================
+           AIヒント
+           ========================================= */
+        #ai-hint {
+            position: absolute;
+            bottom: 180px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 20px;
+            border-radius: 15px;
+            max-width: 80%;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+            z-index: 200;
+        }
+    </style>
+</head>
+<body>
+    
+    <!-- 背景をグレーにするためのオーバーレイ -->
+    <div id="result-overlay"></div>
+
+    <div class="header-logo">
+        <span>DICE TALK EX</span>
+    </div>
+
+    <div class="stage" id="stage">
+        <div class="dice-container" id="dice-container">
+            <div class="dice" id="dice">
+                <div class="face f1" id="f1"><span></span></div>
+                <div class="face f2" id="f2"><span></span></div>
+                <div class="face f3" id="f3"><span></span></div>
+                <div class="face f4" id="f4"><span></span></div>
+                <div class="face f5" id="f5"><span></span></div>
+                <div class="face f6" id="f6"><span></span></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-container">
+        <div id="theme-text">長押しでパワーを溜めて<br>離してスロー！</div>
+    </div>
+
+    <div id="ai-hint"></div>
+
+    <div class="controls-area">
+        <div class="power-gauge-container">
+            <div class="power-bar" id="power-bar"></div>
+        </div>
+        <p class="info-text" id="status-text">スペースキー長押し (最大3秒)</p>
+        
+        <div class="controls">
+            <!-- マウス操作用（タッチデバイス対応） -->
+            <button class="btn roll-button" id="roll-btn">PUSH & HOLD</button>
+            <button class="btn ai-button" id="ai-gen-btn" onclick="generateAiTheme()">AIお題</button>
+            <button class="btn ai-button" id="ai-hint-btn" onclick="deepenTalk()" style="display:none;">深掘り</button>
+        </div>
+    </div>
+
+    <script>
+        // 設定値
+        const apiKey = "";
+        const MAX_CHARGE_TIME = 3000; // 3秒でMAX
+        const BOUNCE_DAMPING = 0.8;   // 壁に当たった時の速度減衰
+        const DRAG = 0.96;            // 空気抵抗（0.985 -> 0.96: 強くして早く止める）
+        const STOP_THRESHOLD = 8.0;   // 止まる速度の閾値（4.0 -> 8.0: 早く判定する）
+
+
+        // 色の設定 (RGB配列)
+        const COLORS = {
+            // ターコイズブルー (初期)
+            start: { inner: [38, 196, 181], outer: [26, 138, 127] }, 
+            // 赤色 (MAXチャージ)
+            end:   { inner: [255, 75, 75], outer: [139, 0, 0] }      
+        };
+
+        // デフォルトお題
+        const defaultThemes = {
+            1: "今期の一番のチャレンジした仕事",
+            2: "今期の自分の価値観がかわった出来事",
+            3: "PUチームの好きなところ",
+            4: "憧れてるチーム像",
+            5: "こんな人になりたい",
+            6: "自分のストレス＆リフレッシュ方法"
+        };
+
+        // 状態変数
+        let chargeStartTime = 0;
+        let isCharging = false;
+        let isMoving = false;
+        let chargePower = 0; // 0.0 - 1.0
+        let animationFrameId;
+
+        // 未使用の面を管理（重複なしロジック用）
+        let unusedFaces = [1, 2, 3, 4, 5, 6];
+        
+        // 物理演算用変数
+        let pos = { x: 0, y: 0, z: -500 }; 
+        let vel = { x: 0, y: 0, z: 0 };
+        let rot = { x: 15, y: 15, z: 0 };
+        let rotVel = { x: 0, y: 0, z: 0 };
+
+        // DOM要素
+        const diceContainer = document.getElementById('dice-container');
+        const dice = document.getElementById('dice');
+        const powerBar = document.getElementById('power-bar');
+        const rollBtn = document.getElementById('roll-btn');
+        const themeText = document.getElementById('theme-text');
+        const overlay = document.getElementById('result-overlay');
+        
+        // 初期化
+        window.addEventListener('DOMContentLoaded', () => {
+            updateDiceFaces();
+            setupEvents();
+        });
+
+        // 背景色の更新関数
+        function updateBackgroundColor(t) {
+            const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+            const inner = COLORS.start.inner.map((c, i) => lerp(c, COLORS.end.inner[i], t));
+            const outer = COLORS.start.outer.map((c, i) => lerp(c, COLORS.end.outer[i], t));
+            document.body.style.setProperty('--bg-inner', `rgb(${inner.join(',')})`);
+            document.body.style.setProperty('--bg-outer', `rgb(${outer.join(',')})`);
+        }
+
+        function updateDiceFaces() {
+            for(let i=1; i<=6; i++) {
+                const face = document.getElementById(`f${i}`);
+                if (face) {
+                    const span = face.querySelector('span');
+                    const text = defaultThemes[i];
+                    span.innerText = text;
+                    span.style.fontSize = text.length > 20 ? '0.9rem' : '1.1rem';
+                }
+            }
+        }
+
+        // ==========================================
+        // 入力イベント（チャージ処理）
+        // ==========================================
+        function setupEvents() {
+            // キーボード
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && !isCharging && !isMoving) {
+                    startCharging();
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'Space' && isCharging) {
+                    releaseDice();
+                }
+            });
+
+            // ボタン（マウス/タッチ）
+            rollBtn.addEventListener('mousedown', (e) => {
+                if(!isMoving) startCharging();
+            });
+            rollBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault(); 
+                if(!isMoving) startCharging();
+            }, {passive: false});
+
+            document.addEventListener('mouseup', () => {
+                if(isCharging) releaseDice();
+            });
+            document.addEventListener('touchend', () => {
+                if(isCharging) releaseDice();
+            });
+        }
+
+        function startCharging() {
+            isCharging = true;
+            chargeStartTime = Date.now();
+            rollBtn.classList.add('charging');
+            themeText.classList.remove('show');
+            overlay.classList.remove('active'); // オーバーレイ非表示
+            document.getElementById('ai-hint-btn').style.display = 'none';
+            document.getElementById('ai-hint').style.display = 'none';
+            
+            function chargeLoop() {
+                if (!isCharging) return;
+                const elapsed = Date.now() - chargeStartTime;
+                chargePower = Math.min(elapsed / MAX_CHARGE_TIME, 1.0);
+                
+                powerBar.style.width = `${chargePower * 100}%`;
+                if (chargePower >= 1.0) {
+                    powerBar.classList.add('max');
+                } else {
+                    powerBar.classList.remove('max');
+                }
+                updateBackgroundColor(chargePower);
+                requestAnimationFrame(chargeLoop);
+            }
+            chargeLoop();
+        }
+
+        function releaseDice() {
+            isCharging = false;
+            rollBtn.classList.remove('charging');
+            
+            if (chargePower < 0.1) chargePower = 0.1;
+            
+            throwDice(chargePower);
+            
+            setTimeout(() => {
+                powerBar.style.width = '0%';
+                powerBar.classList.remove('max');
+            }, 500);
+        }
+
+        // ==========================================
+        // 物理アニメーション（スローイング）
+        // ==========================================
+        function throwDice(power) {
+            isMoving = true;
+            
+            // 初速の設定 (前回比さらに倍増)
+            // baseSpeed (30~100) * 4倍
+            const baseSpeed = 30 + (power * 70);
+            const speed = baseSpeed * 4.0; 
+            
+            const angle = Math.random() * Math.PI * 2;
+            
+            vel.x = Math.cos(angle) * speed;
+            vel.y = Math.sin(angle) * speed;
+            vel.z = (-20 - (Math.random() * 30)) * 4.0; // 奥への勢いも激しく
+            
+            // 回転速度 (ものすごく回す)
+            rotVel.x = (Math.random() - 0.5) * (20 + power * 30) * 4.0;
+            rotVel.y = (Math.random() - 0.5) * (20 + power * 30) * 4.0;
+            rotVel.z = (Math.random() - 0.5) * (10 + power * 10) * 4.0;
+
+            lastTime = Date.now();
+            animationFrameId = requestAnimationFrame(physicsLoop);
+        }
+
+        let lastTime = 0;
+        
+        function physicsLoop() {
+            const now = Date.now();
+            const dt = (now - lastTime) / 16.66; 
+            lastTime = now;
+
+            // 位置更新
+            pos.x += vel.x * dt;
+            pos.y += vel.y * dt;
+            pos.z += vel.z * dt;
+
+            // 回転更新
+            rot.x += rotVel.x * dt;
+            rot.y += rotVel.y * dt;
+            rot.z += rotVel.z * dt;
+
+            // 速度減衰 (空気抵抗UPで早く止める)
+            vel.x *= DRAG;
+            vel.y *= DRAG;
+            vel.z *= DRAG;
+            rotVel.x *= 0.98; // 回転減衰も早めに
+            rotVel.y *= 0.98;
+            rotVel.z *= 0.98;
+
+            // 背景色戻し
+            if (chargePower > 0) {
+                chargePower -= 0.03; // 色戻りも早く
+                if (chargePower < 0) chargePower = 0;
+                updateBackgroundColor(chargePower);
+            }
+
+            // 壁判定
+            const boundsX = window.innerWidth / 2 - 100;
+            const boundsY = window.innerHeight / 2 - 100;
+            const boundsZFront = 200;
+            const boundsZBack = -1500;
+
+            let hit = false;
+            
+            if (pos.x > boundsX) {
+                pos.x = boundsX; vel.x *= -BOUNCE_DAMPING; hit = true;
+                spawnEffect(window.innerWidth - 50, window.innerHeight/2 + pos.y);
+            } else if (pos.x < -boundsX) {
+                pos.x = -boundsX; vel.x *= -BOUNCE_DAMPING; hit = true;
+                spawnEffect(50, window.innerHeight/2 + pos.y);
+            }
+
+            if (pos.y > boundsY) {
+                pos.y = boundsY; vel.y *= -BOUNCE_DAMPING; hit = true;
+                spawnEffect(window.innerWidth/2 + pos.x, window.innerHeight - 50);
+            } else if (pos.y < -boundsY) {
+                pos.y = -boundsY; vel.y *= -BOUNCE_DAMPING; hit = true;
+                spawnEffect(window.innerWidth/2 + pos.x, 50);
+            }
+
+            if (pos.z > boundsZFront) {
+                pos.z = boundsZFront; vel.z *= -BOUNCE_DAMPING;
+            } else if (pos.z < boundsZBack) {
+                pos.z = boundsZBack; vel.z *= -BOUNCE_DAMPING;
+            }
+
+            if (pos.z < -500) {
+                vel.z += 1.0; // 復帰力UP
+            }
+
+            // DOM適用
+            diceContainer.style.transform = `translate3d(${pos.x}px, ${pos.y}px, ${pos.z}px)`;
+            dice.style.transform = `rotateX(${rot.x}deg) rotateY(${rot.y}deg) rotateZ(${rot.z}deg)`;
+
+            // 停止判定
+            const speed = Math.sqrt(vel.x*vel.x + vel.y*vel.y + vel.z*vel.z);
+            
+            // 速度閾値を上げて、より早く停止状態に移行させる
+            if (speed < STOP_THRESHOLD && Math.abs(pos.z) < 1000) {
+                cancelAnimationFrame(animationFrameId);
+                finishRoll();
+            } else {
+                animationFrameId = requestAnimationFrame(physicsLoop);
+            }
+        }
+
+        // ==========================================
+        // 結果確定＆ズーム演出
+        // ==========================================
+        function finishRoll() {
+            updateBackgroundColor(0);
+
+            // 重複なしロジック：未使用リストからランダムに選ぶ
+            if (unusedFaces.length === 0) {
+                unusedFaces = [1, 2, 3, 4, 5, 6]; // 一周したらリセット
+            }
+            
+            const randomIndex = Math.floor(Math.random() * unusedFaces.length);
+            const result = unusedFaces[randomIndex];
+            
+            // 選ばれた面をリストから削除
+            unusedFaces.splice(randomIndex, 1);
+            
+            // 修正済み：正面に向けるためのコンテナ回転角
+            const targetRotations = {
+                1: { x: 0,   y: 0 },
+                2: { x: 0,   y: 90 },  // f2(Y-90)を正面にするには+90
+                3: { x: 0,   y: -90 }, // f3(Y+90)を正面にするには-90
+                4: { x: 90,  y: 0 },   // f4(X-90)を正面にするには+90
+                5: { x: -90, y: 0 },   // f5(X+90)を正面にするには-90
+                6: { x: 0,   y: 180 }
+            };
+
+            const t = targetRotations[result];
+            
+            const snap = (current, target) => {
+                const diff = target - (current % 360);
+                let adjust = diff;
+                if (adjust > 180) adjust -= 360;
+                if (adjust < -180) adjust += 360;
+                return current + adjust;
+            };
+
+            const finalX = snap(rot.x, t.x);
+            const finalY = snap(rot.y, t.y);
+            const finalZ = snap(rot.z, 0); 
+
+            // トランジションを高速化 (1.2s -> 0.6s)
+            diceContainer.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+            dice.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+
+            diceContainer.style.transform = `translate3d(0px, 0px, 200px)`; 
+            dice.style.transform = `rotateX(${finalX}deg) rotateY(${finalY}deg) rotateZ(${finalZ}deg)`;
+
+            // テキスト表示の待ち時間を短縮 (800ms -> 300ms)
+            setTimeout(() => {
+                const text = document.getElementById(`f${result}`).querySelector('span').innerText;
+                
+                themeText.innerHTML = text.replace(/\n/g, '<br>');
+                
+                // フォントサイズを調整 (長文対策で少し小さくする)
+                const fontSizeVw = text.length > 20 ? 6 : 9; // 8/13 -> 6/9 に縮小して改行しやすく
+                themeText.style.fontSize = `${fontSizeVw}vw`;
+                
+                themeText.classList.add('show');
+                overlay.classList.add('active'); // 背景暗転
+                
+                themeTextValue = text;
+                document.getElementById('ai-hint-btn').style.display = 'block';
+                isMoving = false;
+                
+                setTimeout(() => {
+                    diceContainer.style.transition = '';
+                    dice.style.transition = '';
+                    pos = { x: 0, y: 0, z: 200 };
+                    rot = { x: finalX, y: finalY, z: finalZ };
+                }, 600); // ここも短縮に合わせて調整
+
+            }, 300);
+        }
+
+        // ==========================================
+        // エフェクト
+        // ==========================================
+        function spawnEffect(x, y) {
+            const el = document.createElement('div');
+            el.className = 'particle';
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 600);
+        }
+
+        // ==========================================
+        // AI関連
+        // ==========================================
+        let themeTextValue = "";
+        
+        async function callGemini(prompt, systemPrompt = "") {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            return result.candidates?.[0]?.content?.parts?.[0]?.text || "エラー";
+        }
+
+        async function generateAiTheme() {
+            if (isMoving || isCharging) return;
+            const btn = document.getElementById('ai-gen-btn');
+            btn.disabled = true;
+            btn.innerText = "生成中...";
+            try {
+                const theme = await callGemini("親睦会で使える、誰もが答えやすい面白いトークテーマを1つ提案してください。1文で。", "あなたは司会者です。");
+                const cleanTheme = theme.replace(/["「」]/g, '');
+                
+                const f1 = document.getElementById('f1');
+                f1.querySelector('span').innerText = cleanTheme;
+                
+                throwDice(0.1); 
+                
+            } catch (e) {
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "AIお題";
+            }
+        }
+
+        async function deepenTalk() {
+            const hintDisplay = document.getElementById('ai-hint');
+            hintDisplay.innerText = "考え中...";
+            hintDisplay.style.display = 'block';
+            try {
+                const hint = await callGemini(`テーマ「${themeTextValue}」を深掘りするための質問を2つ考えて。`, "コーチとして短く答えて。");
+                hintDisplay.innerText = hint;
+            } catch (e) {
+                hintDisplay.innerText = "取得失敗";
+            }
+        }
+
+    </script>
+</body>
+</html>
