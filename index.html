@@ -294,32 +294,6 @@
             75% { transform: rotate(-1deg); }
             100% { transform: rotate(0deg); }
         }
-
-        .ai-button {
-            background: rgba(255,255,255,0.2);
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255,255,255,0.3);
-        }
-        .ai-button:hover { background: rgba(255,255,255,0.3); }
-
-        /* =========================================
-           AIヒント
-           ========================================= */
-        #ai-hint {
-            position: absolute;
-            bottom: 180px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            color: #333;
-            padding: 20px;
-            border-radius: 15px;
-            max-width: 80%;
-            display: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            text-align: center;
-            z-index: 200;
-        }
     </style>
 </head>
 <body>
@@ -348,8 +322,6 @@
         <div id="theme-text">長押しでパワーを溜めて<br>離してスロー！</div>
     </div>
 
-    <div id="ai-hint"></div>
-
     <div class="controls-area">
         <div class="power-gauge-container">
             <div class="power-bar" id="power-bar"></div>
@@ -359,14 +331,11 @@
         <div class="controls">
             <!-- マウス操作用（タッチデバイス対応） -->
             <button class="btn roll-button" id="roll-btn">PUSH & HOLD</button>
-            <button class="btn ai-button" id="ai-gen-btn" onclick="generateAiTheme()">AIお題</button>
-            <button class="btn ai-button" id="ai-hint-btn" onclick="deepenTalk()" style="display:none;">深掘り</button>
         </div>
     </div>
 
     <script>
         // 設定値
-        const apiKey = "";
         const MAX_CHARGE_TIME = 3000; // 3秒でMAX
         const BOUNCE_DAMPING = 0.8;   // 壁に当たった時の速度減衰
         const DRAG = 0.96;            // 空気抵抗（0.985 -> 0.96: 強くして早く止める）
@@ -481,8 +450,6 @@
             rollBtn.classList.add('charging');
             themeText.classList.remove('show');
             overlay.classList.remove('active'); // オーバーレイ非表示
-            document.getElementById('ai-hint-btn').style.display = 'none';
-            document.getElementById('ai-hint').style.display = 'none';
             
             function chargeLoop() {
                 if (!isCharging) return;
@@ -684,8 +651,6 @@
                 themeText.classList.add('show');
                 overlay.classList.add('active'); // 背景暗転
                 
-                themeTextValue = text;
-                document.getElementById('ai-hint-btn').style.display = 'block';
                 isMoving = false;
                 
                 setTimeout(() => {
@@ -708,60 +673,6 @@
             el.style.top = y + 'px';
             document.body.appendChild(el);
             setTimeout(() => el.remove(), 600);
-        }
-
-        // ==========================================
-        // AI関連
-        // ==========================================
-        let themeTextValue = "";
-        
-        async function callGemini(prompt, systemPrompt = "") {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] }
-            };
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const result = await response.json();
-            return result.candidates?.[0]?.content?.parts?.[0]?.text || "エラー";
-        }
-
-        async function generateAiTheme() {
-            if (isMoving || isCharging) return;
-            const btn = document.getElementById('ai-gen-btn');
-            btn.disabled = true;
-            btn.innerText = "生成中...";
-            try {
-                const theme = await callGemini("親睦会で使える、誰もが答えやすい面白いトークテーマを1つ提案してください。1文で。", "あなたは司会者です。");
-                const cleanTheme = theme.replace(/["「」]/g, '');
-                
-                const f1 = document.getElementById('f1');
-                f1.querySelector('span').innerText = cleanTheme;
-                
-                throwDice(0.1); 
-                
-            } catch (e) {
-                console.error(e);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "AIお題";
-            }
-        }
-
-        async function deepenTalk() {
-            const hintDisplay = document.getElementById('ai-hint');
-            hintDisplay.innerText = "考え中...";
-            hintDisplay.style.display = 'block';
-            try {
-                const hint = await callGemini(`テーマ「${themeTextValue}」を深掘りするための質問を2つ考えて。`, "コーチとして短く答えて。");
-                hintDisplay.innerText = hint;
-            } catch (e) {
-                hintDisplay.innerText = "取得失敗";
-            }
         }
 
     </script>
